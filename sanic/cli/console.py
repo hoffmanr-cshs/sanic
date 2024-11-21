@@ -37,10 +37,24 @@ except ImportError:
     HTTPX_AVAILABLE = False
 
 try:
-    import readline  # noqa
-except ImportError:
+    import readline
+    import rlcompleter
+
+    if sys.version_info >= (3, 13):
+        # readline.backend added in python 3.13
+        READLINE_AVAILABLE = readline.backend
+    else:
+        # python 3.12 and earlier
+        readline_doc = getattr(readline, "__doc__", "")
+        if readline_doc is not None and "libedit" in readline_doc:
+            READLINE_AVAILABLE = "editline"
+        else:
+            READLINE_AVAILABLE = "readline"
+    assert READLINE_AVAILABLE in ("editline", "readline")
+except (AssertionError, ImportError):
+    READLINE_AVAILABLE = False
     print(
-        "Module 'readline' not available. History navigation will be limited.",
+        "Module 'readline' not available. REPL navigation may be limited.",
         file=sys.stderr,
     )
 
@@ -135,6 +149,14 @@ class SanicREPL(InteractiveConsole):
                 "To enable it, install httpx:\n\t"
                 f"pip install httpx{Colors.END}\n"
             )
+        if READLINE_AVAILABLE:
+            readline.set_completer(
+                rlcompleter.Completer(locals_available).complete
+            )
+            if READLINE_AVAILABLE == "readline":
+                readline.parse_and_bind("tab: complete")
+            elif READLINE_AVAILABLE == "editline":
+                readline.parse_and_bind("bind ^I rl_complete")
         super().__init__(locals=locals_available)
         self.compile.compiler.flags |= PyCF_ALLOW_TOP_LEVEL_AWAIT
         self.loop = new_event_loop()
